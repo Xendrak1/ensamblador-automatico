@@ -1,86 +1,51 @@
-name: Ensamblador x86_64 Debug Workflow
+set pagination off
+set logging file gdb.log
+set logging enabled on
 
-on:
-  push:
-    paths:
-      - '**.asm'
-      - '.github/workflows/ensamblador.yml'
-      - 'scripts/**'
+file programa
+break _start
+run
 
-jobs:
-  build-and-debug:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Instalar dependencias
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y nasm gdb python3-pandas
-        
-    - name: Verificar versiones
-      run: |
-        nasm --version
-        gdb --version
-        python3 --version
-        
-    - name: Compilar ensamblador
-      run: |
-        nasm -f elf64 -g -F dwarf programa.asm -o programa.o
-        ld -o programa programa.o
-        
-    - name: Verificar ejecutable
-      run: |
-        file programa
-        ls -l programa
-        readelf -h programa
-        
-    - name: Preparar script GDB
-      run: |
-        cat > debug.gdb << 'EOF'
-        set pagination off
-        set logging file gdb.log
-        set logging enabled on
-        file programa
-        break _start
-        run
-        info variables
-        info registers
-        x/32xb 0x403010  # Ver memoria en 0x403010 (X1, X2, etc.)
-        x/32xb 0x407000  # Ver reservas en 0x407000 (X3, X4, etc.)
+# Capturar estado inicial
+echo \n[ESTADO INICIAL]\n
+info variables
+info registers
 
-        # Ejecutar paso a paso y guardar estados
-        stepi
-        info registers
-        x/32xb 0x403010
-        x/32xb 0x407000
+# Examinar memoria inicial
+echo \n[MEMORIA INICIAL]\n
+x/32xb 0x402000    # Variables en memoria
+x/8xw  0x402000    # Valores en formato word
+x/32c  0x40200c    # Cadena en memoria (NOMBRE)
 
-        stepi
-        info registers
-        x/32xb 0x403010
-        x/32xb 0x407000
+# Ejecutar programa paso a paso
+echo \n[EJECUCIÓN PASO A PASO]\n
 
-        backtrace
-        quit
-        EOF
-        
-    - name: Ejecutar GDB
-      run: |
-        gdb -batch -x debug.gdb
-        cat gdb.log
-        
-    - name: Procesar resultados
-      run: |
-        mkdir -p output
-        python3 scripts/procesar_gdb.py
-        ls -la gdb.log output/
-        
-    - name: Subir resultados
-      uses: actions/upload-artifact@v4
-      with:
-        name: debug-results
-        path: |
-          output/*.csv
-          gdb.log
-        retention-days: 5
+# Paso 1
+stepi
+echo \n[PASO 1]\n
+info registers
+x/32xb 0x402000
+x/8xw  0x402000
+
+# Paso 2
+stepi
+echo \n[PASO 2]\n
+info registers
+x/32xb 0x402000
+x/8xw  0x402000
+
+# Paso 3
+stepi
+echo \n[PASO 3]\n
+info registers
+x/32xb 0x402000
+x/8xw  0x402000
+
+# Estado final y backtrace
+echo \n[ESTADO FINAL]\n
+info registers
+x/32xb 0x402000
+x/8xw  0x402000
+backtrace
+
+quit
