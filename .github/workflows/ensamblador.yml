@@ -18,28 +18,31 @@ jobs:
 
       - name: Compilar código ensamblador
         run: |
-          nasm -f elf64 programa.asm -o programa.o
+          nasm -f elf64 -g -F dwarf programa.asm -o programa.o  # Agregar símbolos de depuración
           ld -o programa programa.o
           chmod +x programa  # Asegurar permisos de ejecución
 
       - name: Verificar que el ejecutable existe
         run: |
-          ls -lah programa || { echo "ERROR: programa no fue generado"; exit 1; }
+          if [ ! -f "programa" ]; then
+            echo "ERROR: programa no fue generado";
+            exit 1;
+          fi
 
       - name: Ejecutar en GDB y extraer datos
         run: |
           echo "set pagination off" > debug.gdb
           echo "set logging on" >> debug.gdb
           echo "file programa" >> debug.gdb  # Cargar el binario correctamente
-          echo "break _start" >> debug.gdb
-          echo "run" >> debug.gdb
+          echo "start" >> debug.gdb  # Cambiar 'run' por 'start' para evitar errores
           echo "info registers" >> debug.gdb
-          echo "x/100x $rsp" >> debug.gdb
+          echo "x/20x $rsp" >> debug.gdb  # Reducir cantidad de bytes leídos para evitar errores
           echo "quit" >> debug.gdb
           gdb -batch -x debug.gdb > salida_gdb.txt || { echo "ERROR: GDB falló"; exit 1; }
 
       - name: Generar tablas en CSV
-        run: python3 scripts/procesar_gdb.py || { echo "ERROR: Falló la conversión de datos"; exit 1; }
+        run: |
+          python3 scripts/procesar_gdb.py || echo "ERROR: Falló la conversión de datos" && exit 1
 
       - name: Subir archivos de salida
         uses: actions/upload-artifact@v3
