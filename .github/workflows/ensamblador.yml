@@ -40,7 +40,8 @@ jobs:
       run: |
         cat > debug.gdb << 'EOF'
         set pagination off
-        set logging on gdb.log
+        set logging file gdb.log
+        set logging enabled on
         file programa
         break _start
         run
