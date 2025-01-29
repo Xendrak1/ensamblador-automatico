@@ -59,8 +59,19 @@ jobs:
     - name: Procesar resultados
       run: |
         mkdir -p output
-        python3 scripts/procesar_gdb.py
-        ls -la gdb.log output/
+        if [ -f gdb.log ]; then
+          echo "Contenido de gdb.log:"
+          cat gdb.log
+          echo "---"
+        else
+          echo "⚠ gdb.log no existe"
+        fi
+        python3 scripts/procesar_gdb.py || {
+          echo "Error en el procesamiento. Mostrando contenido del directorio:"
+          ls -la
+          exit 1
+        }
+        ls -la output/
         
     - name: Subir resultados
       uses: actions/upload-artifact@v4
