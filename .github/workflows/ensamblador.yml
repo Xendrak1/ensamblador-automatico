@@ -19,16 +19,16 @@ jobs:
       - name: Compilar ensamblador
         run: |
           nasm -f elf64 programa.asm -o programa.o
-          ld programa.o -o programa
+          ld programa.o -o programa 
+          chmod +x programa  # Asegurar permisos de ejecución
 
       - name: Ejecutar en GDB y extraer datos
         run: |
           echo "set pagination off" > debug.gdb
           echo "set logging on" >> debug.gdb
-          echo "target exec ./programa" >> debug.gdb
+          echo "file programa" >> debug.gdb  # 🔹 Cargar el binario correctamente
           echo "break _start" >> debug.gdb
           echo "run" >> debug.gdb
-          echo "info variables" >> debug.gdb
           echo "info registers" >> debug.gdb
           echo "x/100x $rsp" >> debug.gdb
           echo "quit" >> debug.gdb
