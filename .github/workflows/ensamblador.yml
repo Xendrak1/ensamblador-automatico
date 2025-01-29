@@ -3,39 +3,43 @@ name: Ensamblador Automático
 on:
   push:
     branches:
-      - main  # Se ejecuta cuando subes código a main
+      - main  # Se ejecuta automáticamente cuando subes código a main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Descargar código
+      - name: Descargar código desde GitHub
         uses: actions/checkout@v3
 
-      - name: Instalar herramientas
+      - name: Instalar herramientas necesarias
         run: sudo apt update && sudo apt install -y nasm gdb python3-pandas
 
-      - name: Compilar ensamblador
+      - name: Compilar código ensamblador
         run: |
           nasm -f elf64 programa.asm -o programa.o
-          ld programa.o -o programa 
+          ld -o programa programa.o
           chmod +x programa  # Asegurar permisos de ejecución
+
+      - name: Verificar que el ejecutable existe
+        run: |
+          ls -lah programa || { echo "ERROR: programa no fue generado"; exit 1; }
 
       - name: Ejecutar en GDB y extraer datos
         run: |
           echo "set pagination off" > debug.gdb
           echo "set logging on" >> debug.gdb
-          echo "file programa" >> debug.gdb  # 🔹 Cargar el binario correctamente
+          echo "file programa" >> debug.gdb  # Cargar el binario correctamente
           echo "break _start" >> debug.gdb
           echo "run" >> debug.gdb
           echo "info registers" >> debug.gdb
           echo "x/100x $rsp" >> debug.gdb
           echo "quit" >> debug.gdb
-          gdb -batch -x debug.gdb > salida_gdb.txt
+          gdb -batch -x debug.gdb > salida_gdb.txt || { echo "ERROR: GDB falló"; exit 1; }
 
       - name: Generar tablas en CSV
-        run: python3 scripts/procesar_gdb.py
+        run: python3 scripts/procesar_gdb.py || { echo "ERROR: Falló la conversión de datos"; exit 1; }
 
       - name: Subir archivos de salida
         uses: actions/upload-artifact@v3
