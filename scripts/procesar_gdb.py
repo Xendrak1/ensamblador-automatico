@@ -7,26 +7,22 @@ def log_debug(msg: str) -> None:
     print(f"DEBUG: {msg}")
 
 def parse_memoria(linea: str) -> tuple[str, List[str]] | None:
-    # Formato esperado: 0x7fffffffe000:      0x00    0x00    0x00    0x00
     match = re.match(r"0x([0-9a-fA-F]+):\s+((?:0x[0-9a-fA-F]+\s*)+)", linea.strip())
     if match:
         direccion = '0x' + match.group(1)
-        datos = [val.strip() for val in match.group(2).split() if val.strip()]
+        datos = re.findall(r"0x[0-9a-fA-F]+", match.group(2))  # 🔹 Extrae solo valores hexadecimales
         return direccion, datos
     return None
 
 def parse_registro(linea: str) -> tuple[str, str] | None:
-    # Formato esperado: rax            0x12345678
-    match = re.match(r"(\w+)\s+0x([0-9a-fA-F]+)", linea.strip())
+    match = re.match(r"(\w+)\s+0x([0-9a-fA-F]+)(?:\s+\d+)?", linea.strip())  # Soporta ambas columnas
     if match:
         return match.group(1), '0x' + match.group(2)
     return None
 
 def main():
-    # Crear directorio output si no existe
     os.makedirs("output", exist_ok=True)
 
-    # Leer la salida de GDB
     try:
         with open("gdb.log", "r") as f:
             contenido = f.readlines()
@@ -35,21 +31,18 @@ def main():
         print("Error: No se encontró el archivo gdb.log")
         return 1
     
-    # Variables de recolección
     variables: List[Dict[str, Any]] = []
     reserva: List[Dict[str, Any]] = []
     registros: List[Dict[str, Any]] = []
     iteracion = 0
 
-    # Procesar línea por línea
     for num_linea, linea in enumerate(contenido, 1):
         linea = linea.strip()
         
-        # Ignorar líneas de comando GDB
-        if any(cmd in linea for cmd in ['x/32xb', '(gdb)', '=>']):
+        if "info registers" in linea.lower():
+            iteracion += 1
             continue
 
-        # Intentar parsear como registro
         reg_result = parse_registro(linea)
         if reg_result:
             nombre_reg, valor = reg_result
@@ -60,7 +53,6 @@ def main():
             })
             continue
 
-        # Intentar parsear como memoria
         mem_result = parse_memoria(linea)
         if mem_result:
             direccion, datos = mem_result
@@ -74,21 +66,17 @@ def main():
             else:
                 variables.append(data_dict)
 
-    # Guardar resultados
     try:
         if registros:
-            df = pd.DataFrame(registros)
-            df.to_csv("output/registros.csv", index=False)
+            pd.DataFrame(registros).to_csv("output/registros.csv", index=False)
             print(f"✓ Guardados {len(registros)} registros")
 
         if variables:
-            df = pd.DataFrame(variables)
-            df.to_csv("output/variables.csv", index=False)
+            pd.DataFrame(variables).to_csv("output/variables.csv", index=False)
             print(f"✓ Guardadas {len(variables)} variables")
 
         if reserva:
-            df = pd.DataFrame(reserva)
-            df.to_csv("output/reserva.csv", index=False)
+            pd.DataFrame(reserva).to_csv("output/reserva.csv", index=False)
             print(f"✓ Guardadas {len(reserva)} reservas")
 
         if not any([registros, variables, reserva]):
