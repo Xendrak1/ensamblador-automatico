@@ -45,9 +45,22 @@ jobs:
         file programa
         break _start
         run
+        info variables  # 🔍 Ver todas las variables y sus direcciones
+        info registers  # 🔍 Ver todos los registros en el inicio
+        x/32xb 0x403010  # 🔹 Verificar memoria desde 0x403010 (X1, X2, etc.)
+        x/32xb 0x407000  # 🔹 Verificar reservas desde 0x407000 (X3, X4, etc.)
+        
+        # 🔹 Añadimos pasos de depuración extra
+        stepi
+        info registers  # 🔍 Ver registros después del primer paso
+        x/32xb 0x403010  # 🔹 Revisar nuevamente la memoria
+        x/32xb 0x407000
+
+        stepi
         info registers
-        x/32xb 0x403010  # 🔹 Verificar memoria desde 0x403010
-        x/32xb 0x407000  # 🔹 Verificar reserva desde 0x407000
+        x/32xb 0x403010
+        x/32xb 0x407000
+
         backtrace
         quit
         EOF
