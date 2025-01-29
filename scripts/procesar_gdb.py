@@ -1,83 +1,107 @@
-name: Ensamblador x86_64 Debug Workflow
+import re
+import pandas as pd
+import os
+from typing import List, Dict, Any
 
-on:
-  push:
-    paths:
-      - '**.asm'
-      - '.github/workflows/ensamblador.yml'
-      - 'scripts/**'
+def log_debug(msg: str) -> None:
+    print(f"DEBUG: {msg}")
 
-jobs:
-  build-and-debug:
-    runs-on: ubuntu-latest
+def parse_memoria(linea: str) -> tuple[str, List[str]] | None:
+    # Formato esperado: 0x7fffffffe000:      0x00    0x00    0x00    0x00
+    match = re.match(r"0x([0-9a-fA-F]+):\s+((?:0x[0-9a-fA-F]+\s*)+)", linea.strip())
+    if match:
+        direccion = '0x' + match.group(1)
+        datos = [val.strip() for val in match.group(2).split() if val.strip()]
+        return direccion, datos
+    return None
+
+def parse_registro(linea: str) -> tuple[str, str] | None:
+    # Formato esperado: rax            0x12345678
+    match = re.match(r"(\w+)\s+0x([0-9a-fA-F]+)", linea.strip())
+    if match:
+        return match.group(1), '0x' + match.group(2)
+    return None
+
+def main():
+    # Crear directorio output si no existe
+    os.makedirs("output", exist_ok=True)
+
+    # Leer la salida de GDB
+    try:
+        with open("gdb.log", "r") as f:
+            contenido = f.readlines()
+        log_debug(f"Leídas {len(contenido)} líneas del log")
+    except FileNotFoundError:
+        print("Error: No se encontró el archivo gdb.log")
+        return 1
     
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Instalar dependencias
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y nasm gdb python3-pandas
+    # Variables de recolección
+    variables: List[Dict[str, Any]] = []
+    reserva: List[Dict[str, Any]] = []
+    registros: List[Dict[str, Any]] = []
+    iteracion = 0
+
+    # Procesar línea por línea
+    for num_linea, linea in enumerate(contenido, 1):
+        linea = linea.strip()
         
-    - name: Verificar versiones
-      run: |
-        nasm --version
-        gdb --version
-        python3 --version
-        
-    - name: Compilar ensamblador
-      run: |
-        nasm -f elf64 -g -F dwarf programa.asm -o programa.o
-        ld -o programa programa.o
-        
-    - name: Verificar ejecutable
-      run: |
-        file programa
-        ls -l programa
-        readelf -h programa
-        
-    - name: Preparar script GDB
-      run: |
-        cat > debug.gdb << 'EOF'
-        set pagination off
-        set logging file gdb.log
-        set logging enabled on
-        file programa
-        break _start
-        run
-        info registers
-        x/32xb $rsp
-        backtrace
-        quit
-        EOF
-        
-    - name: Ejecutar GDB
-      run: |
-        gdb -batch -x debug.gdb
-        cat gdb.log
-        
-    - name: Procesar resultados
-      run: |
-        mkdir -p output
-        if [ -f gdb.log ]; then
-          echo "Contenido de gdb.log:"
-          cat gdb.log
-          echo "---"
-        else
-          echo "⚠ gdb.log no existe"
-        fi
-        python3 scripts/procesar_gdb.py || {
-          echo "Error en el procesamiento. Mostrando contenido del directorio:"
-          ls -la
-          exit 1
-        }
-        ls -la output/
-        
-    - name: Subir resultados
-      uses: actions/upload-artifact@v4
-      with:
-        name: debug-results
-        path: |
-          output/*.csv
-          gdb.log
-        retention-days: 5
+        # Ignorar líneas de comando GDB
+        if any(cmd in linea for cmd in ['x/32xb', '(gdb)', '=>']):
+            continue
+
+        # Intentar parsear como registro
+        reg_result = parse_registro(linea)
+        if reg_result:
+            nombre_reg, valor = reg_result
+            registros.append({
+                'iteracion': iteracion,
+                'registro': nombre_reg,
+                'valor': valor
+            })
+            continue
+
+        # Intentar parsear como memoria
+        mem_result = parse_memoria(linea)
+        if mem_result:
+            direccion, datos = mem_result
+            data_dict = {
+                'iteracion': iteracion,
+                'direccion': direccion,
+                'datos': datos
+            }
+            if "reserva" in linea.lower():
+                reserva.append(data_dict)
+            else:
+                variables.append(data_dict)
+
+    # Guardar resultados
+    try:
+        if registros:
+            df = pd.DataFrame(registros)
+            df.to_csv("output/registros.csv", index=False)
+            print(f"✓ Guardados {len(registros)} registros")
+
+        if variables:
+            df = pd.DataFrame(variables)
+            df.to_csv("output/variables.csv", index=False)
+            print(f"✓ Guardadas {len(variables)} variables")
+
+        if reserva:
+            df = pd.DataFrame(reserva)
+            df.to_csv("output/reserva.csv", index=False)
+            print(f"✓ Guardadas {len(reserva)} reservas")
+
+        if not any([registros, variables, reserva]):
+            print("\n⚠ No se encontraron datos para procesar")
+            print("\nMuestra del contenido del log:")
+            for i, linea in enumerate(contenido[:10]):
+                print(f"{i+1:2d}: {linea.strip()}")
+
+    except Exception as e:
+        print(f"Error al guardar CSVs: {str(e)}")
+        return 1
+
+    return 0
+
+if __name__ == "__main__":
+    exit(main())
