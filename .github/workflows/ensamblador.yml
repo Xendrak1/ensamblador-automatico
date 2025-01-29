@@ -1,54 +1,68 @@
-name: Ensamblador Automático
+name: Ensamblador x86_64 Debug Workflow
 
 on:
   push:
-    branches:
-      - main  # Se ejecuta automáticamente cuando subes código a main
+    paths:
+      - '**.asm'
+      - '.github/workflows/ensamblador.yml'
+      - 'scripts/**'
 
 jobs:
-  build:
+  build-and-debug:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Descargar código desde GitHub
-        uses: actions/checkout@v3
-
-      - name: Instalar herramientas necesarias
-        run: sudo apt update && sudo apt install -y nasm gdb python3-pandas
-
-      - name: Compilar código ensamblador
-        run: |
-          nasm -f elf64 -g -F dwarf programa.asm -o programa.o  # Agregar símbolos de depuración
-          ld -o programa programa.o
-          chmod +x programa  # Asegurar permisos de ejecución
-
-      - name: Verificar que el ejecutable existe
-        run: |
-          if [ ! -f "programa" ]; then
-            echo "ERROR: programa no fue generado";
-            exit 1;
-          fi
-
-      - name: Ejecutar en GDB y extraer datos
-        run: |
-          echo "set pagination off" > debug.gdb
-          echo "set logging on" >> debug.gdb
-          echo "file programa" >> debug.gdb
-          echo "start" >> debug.gdb  # 🔹 Se cambia "run" por "start"
-          echo "info registers" >> debug.gdb
-          echo "x/20x $rsp" >> debug.gdb
-          echo "quit" >> debug.gdb
-          gdb -batch -x debug.gdb > salida_gdb.txt || { echo "ERROR: GDB falló"; exit 1; }
-
-      - name: Generar tablas en CSV
-        run: |
-          python3 scripts/procesar_gdb.py || echo "ERROR: Falló la conversión de datos" && exit 1
-
-      - name: Subir archivos de salida
-        uses: actions/upload-artifact@v3
-        with:
-          name: resultados
-          path: |
-            output/variables.csv
-            output/reserva.csv
-            output/registros.csv
+    - uses: actions/checkout@v4
+    
+    - name: Instalar dependencias
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y nasm gdb python3-pandas
+        
+    - name: Verificar versiones
+      run: |
+        nasm --version
+        gdb --version
+        python3 --version
+        
+    - name: Compilar ensamblador
+      run: |
+        nasm -f elf64 -g -F dwarf programa.asm -o programa.o
+        ld -o programa programa.o
+        
+    - name: Verificar ejecutable
+      run: |
+        file programa
+        ls -l programa
+        readelf -h programa
+        
+    - name: Preparar script GDB
+      run: |
+        cat > debug.gdb << 'EOF'
+        set pagination off
+        set logging on gdb.log
+        file programa
+        break _start
+        run
+        info registers
+        x/32xb $rsp
+        backtrace
+        quit
+        EOF
+        
+    - name: Ejecutar GDB
+      run: |
+        gdb -batch -x debug.gdb
+        cat gdb.log
+        
+    - name: Procesar resultados
+      run: python3 scripts/procesar_gdb.py
+        
+    - name: Subir resultados
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-results
+        path: |
+          output/*.csv
+          gdb.log
+        retention-days: 5
