@@ -33,10 +33,10 @@ jobs:
         run: |
           echo "set pagination off" > debug.gdb
           echo "set logging on" >> debug.gdb
-          echo "file programa" >> debug.gdb  # Cargar el binario correctamente
-          echo "start" >> debug.gdb  # Cambiar 'run' por 'start' para evitar errores
+          echo "file programa" >> debug.gdb
+          echo "start" >> debug.gdb  # 🔹 Se cambia "run" por "start"
           echo "info registers" >> debug.gdb
-          echo "x/20x $rsp" >> debug.gdb  # Reducir cantidad de bytes leídos para evitar errores
+          echo "x/20x $rsp" >> debug.gdb
           echo "quit" >> debug.gdb
           gdb -batch -x debug.gdb > salida_gdb.txt || { echo "ERROR: GDB falló"; exit 1; }
 
