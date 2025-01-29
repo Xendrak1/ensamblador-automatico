@@ -46,7 +46,8 @@ jobs:
         break _start
         run
         info registers
-        x/32xb $rsp
+        x/32xb 0x403010  # 🔹 Verificar memoria desde 0x403010
+        x/32xb 0x407000  # 🔹 Verificar reserva desde 0x407000
         backtrace
         quit
         EOF
@@ -57,7 +58,10 @@ jobs:
         cat gdb.log
         
     - name: Procesar resultados
-      run: python3 scripts/procesar_gdb.py
+      run: |
+        mkdir -p output
+        python3 scripts/procesar_gdb.py
+        ls -la gdb.log output/
         
     - name: Subir resultados
       uses: actions/upload-artifact@v4
